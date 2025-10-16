@@ -2117,6 +2117,10 @@
                                     <label for="trade-history-filter-end-date" class="block text-sm font-medium" style="color: var(--text-secondary);">End Date</label>
                                     <input type="date" id="trade-history-filter-end-date" class="w-full rounded-md text-sm border focus:border-blue-500 focus:ring-blue-500" style="background-color: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color);">
                                 </div>
+                                <div class="flex-1 min-w-[200px] max-w-[250px]">
+                                    <label for="trade-history-filter-symbol" class="block text-sm font-medium" style="color: var(--text-secondary);">Symbol</label>
+                                    <input type="text" id="trade-history-filter-symbol" placeholder="Search symbol..." class="w-full rounded-md text-sm border focus:border-blue-500 focus:ring-blue-500" style="background-color: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color);">
+                                </div>
                                 <div class="flex items-end space-x-2">
                                     <button id="trade-history-apply-filter-btn" class="btn-primary text-sm py-2 px-4 rounded-md">Apply</button>
                                     <button id="trade-history-reset-filter-btn" class="btn-primary text-sm py-2 px-4 rounded-md" style="background-color: #6b7280; border-color: #6b7280;">Reset</button>
@@ -4969,6 +4973,14 @@
                     const entryDate = new Date(trade.entry_date);
                     const endDate = new Date(filters.endDate);
                     if (entryDate > endDate) return false;
+                }
+                
+                // Symbol filter
+                if (filters.symbol) {
+                    const symbol = trade.asset || '';
+                    if (!symbol.toLowerCase().includes(filters.symbol.toLowerCase())) {
+                        return false;
+                    }
                 }
                 
                 return true;
@@ -15701,11 +15713,13 @@
             const status = document.getElementById('trade-history-filter-status')?.value || '';
             const startDate = document.getElementById('trade-history-filter-start-date')?.value || '';
             const endDate = document.getElementById('trade-history-filter-end-date')?.value || '';
+            const symbol = document.getElementById('trade-history-filter-symbol')?.value || '';
             
             const filters = {
                 status: status || null,
                 startDate: startDate || null,
-                endDate: endDate || null
+                endDate: endDate || null,
+                symbol: symbol || null
             };
             
             renderTradeHistory(false, filters);
@@ -15715,6 +15729,7 @@
             document.getElementById('trade-history-filter-status').value = '';
             document.getElementById('trade-history-filter-start-date').value = '';
             document.getElementById('trade-history-filter-end-date').value = '';
+            document.getElementById('trade-history-filter-symbol').value = '';
             
             renderTradeHistory(false, {});
         });
