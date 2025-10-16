@@ -4491,11 +4491,11 @@
                 console.log('Navigating to trade-history page');
                 // Show immediate loading state for better UX
                 const tbody = document.getElementById('trade-history-tbody');
-                if (tbody && appState.trades && appState.trades.length > 500) {
+                if (tbody && appState.trades && appState.trades.length > 1000) {
                     tbody.innerHTML = '<tr><td colspan="10" class="text-center py-4">Loading trades...</td></tr>';
                 }
-                // Render with slight delay to allow UI update
-                setTimeout(() => renderTradeHistory(), 10);
+                // Use requestAnimationFrame for smoother rendering
+                requestAnimationFrame(() => renderTradeHistory());
             }
             if (pageId === 'fund-management') {
                 renderFundManagement();
@@ -4503,11 +4503,11 @@
             if (pageId === 'trade-statement') {
                 // Show immediate loading state for better UX
                 const statementBody = document.getElementById('statement-tbody');
-                if (statementBody && appState.trades && appState.trades.length > 500) {
+                if (statementBody && appState.trades && appState.trades.length > 1000) {
                     statementBody.innerHTML = '<tr><td colspan="15" class="text-center py-4">Loading statement...</td></tr>';
                 }
-                // Render with slight delay to allow UI update
-                setTimeout(() => renderStatement(), 10);
+                // Use requestAnimationFrame for smoother rendering
+                requestAnimationFrame(() => renderStatement());
             }
             if (pageId === 'reports') {
                 renderReports();
@@ -4862,11 +4862,16 @@
         // Optimized renderTradeHistory with caching and lazy loading
         let tradeHistoryCache = null;
         let tradeHistoryLastHash = null;
+        let tradeHistoryRendering = false; // Prevent race conditions
         
         const renderTradeHistory = async (skipDelay = false) => {
             try {
                 const tbody = document.getElementById('trade-history-tbody');
                 if (!tbody) return;
+                
+                // Prevent multiple simultaneous renders
+                if (tradeHistoryRendering) return;
+                tradeHistoryRendering = true;
                 
                 // Use existing appState.trades if available, avoid unnecessary fetch
                 let trades = appState.trades;
@@ -4879,6 +4884,7 @@
                 const currentHash = performanceCache.getTradesHash(trades);
                 if (tradeHistoryCache && tradeHistoryLastHash === currentHash) {
                     tbody.innerHTML = tradeHistoryCache;
+                    tradeHistoryRendering = false;
                     return;
                 }
                 
@@ -4886,17 +4892,20 @@
                 if (trades.length > 1000 && !skipDelay) {
                     tbody.innerHTML = '<tr><td colspan="15" class="text-center py-4">Loading trades...</td></tr>';
                     
-                    // Use setTimeout to allow UI to update
-                    setTimeout(() => {
+                    // Use requestAnimationFrame for smoother rendering
+                    requestAnimationFrame(() => {
                         renderTradeHistoryContent(trades, tbody);
-                    }, 10);
+                        tradeHistoryRendering = false;
+                    });
                 } else {
                     // Render immediately for theme changes or small datasets
                     renderTradeHistoryContent(trades, tbody);
+                    tradeHistoryRendering = false;
                 }
                 
             } catch (e) {
                 console.error('renderTradeHistory error', e);
+                tradeHistoryRendering = false;
             }
         };
         
@@ -7741,6 +7750,7 @@
         let statementRenderTimeout = null;
         let statementCache = null;
         let statementLastHash = null;
+        let statementRendering = false; // Prevent race conditions
         
         const renderStatement = (filters = {}, skipDelay = false) => {
             // Clear previous timeout to prevent multiple rapid renders
@@ -7777,13 +7787,18 @@
                 return;
             }
             
-            // Debounce rendering by 50ms to prevent jitter
+            // Debounce rendering by 5ms to prevent jitter (reduced from 10ms)
             statementRenderTimeout = setTimeout(() => {
                 try {
+                    // Prevent multiple simultaneous renders
+                    if (statementRendering) return;
+                    statementRendering = true;
+                    
                     console.log('renderStatement called - trades count:', appState.trades?.length || 0, 'ledger count:', appState.ledger?.length || 0);
                     const statementBody = document.getElementById('statement-tbody');
                     if (!statementBody) {
                         console.log('Statement body not found');
+                        statementRendering = false;
                         return;
                     }
                     
@@ -7796,6 +7811,7 @@
                     const currentHash = performanceCache.getTradesHash(trades) + '_' + performanceCache.getTradesHash(ledger);
                     if (statementCache && statementLastHash === currentHash && Object.keys(filters).length === 0) {
                         statementBody.innerHTML = statementCache;
+                        statementRendering = false;
                         return;
                     }
                     
@@ -7803,17 +7819,21 @@
                     if (trades.length > 1000) {
                         statementBody.innerHTML = '<tr><td colspan="22" class="text-center py-4">Loading statement...</td></tr>';
                         
-                        setTimeout(() => {
+                        // Use requestAnimationFrame for smoother rendering
+                        requestAnimationFrame(() => {
                             renderStatementContent(trades, ledger, statementBody, filters);
-                        }, 10);
+                            statementRendering = false;
+                        });
                     } else {
                         renderStatementContent(trades, ledger, statementBody, filters);
+                        statementRendering = false;
                     }
                     
                 } catch (e) {
                     console.error('renderStatement error', e);
+                    statementRendering = false;
                 }
-            }, 10); // 10ms debounce delay
+            }, 5); // Reduced debounce delay from 10ms to 5ms
         };
         
         const renderStatementContent = async (trades, ledger, statementBody, filters) => {
