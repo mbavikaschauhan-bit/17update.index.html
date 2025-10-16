@@ -2096,6 +2096,34 @@
                             <h2 class="text-3xl font-bold" style="color: var(--text-primary);">Enhanced Trade Logs</h2>
                             <p class="text-lg" style="color: var(--text-secondary);">Cleaner, sharper, and more insightful.</p>
                         </div>
+                        
+                        <!-- Trade History Filters -->
+                        <div class="mb-4 p-4 rounded-lg border" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
+                            <div class="flex flex-wrap items-end gap-4">
+                                <div class="flex-1 min-w-[200px] max-w-[250px]">
+                                    <label for="trade-history-filter-status" class="block text-sm font-medium" style="color: var(--text-secondary);">Status</label>
+                                    <select id="trade-history-filter-status" class="w-full rounded-md text-sm border focus:border-blue-500 focus:ring-blue-500" style="background-color: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color);">
+                                        <option value="">All Status</option>
+                                        <option value="Open">Open</option>
+                                        <option value="Closed">Closed</option>
+                                        <option value="Partial Exit">Partial Exit</option>
+                                    </select>
+                                </div>
+                                <div class="flex-1 min-w-[200px] max-w-[250px]">
+                                    <label for="trade-history-filter-start-date" class="block text-sm font-medium" style="color: var(--text-secondary);">Start Date</label>
+                                    <input type="date" id="trade-history-filter-start-date" class="w-full rounded-md text-sm border focus:border-blue-500 focus:ring-blue-500" style="background-color: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color);">
+                                </div>
+                                <div class="flex-1 min-w-[200px] max-w-[250px]">
+                                    <label for="trade-history-filter-end-date" class="block text-sm font-medium" style="color: var(--text-secondary);">End Date</label>
+                                    <input type="date" id="trade-history-filter-end-date" class="w-full rounded-md text-sm border focus:border-blue-500 focus:ring-blue-500" style="background-color: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color);">
+                                </div>
+                                <div class="flex items-end space-x-2">
+                                    <button id="trade-history-apply-filter-btn" class="btn-primary text-sm py-2 px-4 rounded-md">Apply</button>
+                                    <button id="trade-history-reset-filter-btn" class="btn-primary text-sm py-2 px-4 rounded-md" style="background-color: #6b7280; border-color: #6b7280;">Reset</button>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="rounded-lg shadow-sm overflow-x-auto" style="background-color: var(--bg-primary); border: 1px solid var(--border-color);">
                             <table class="w-full min-w-[1500px] text-xs text-left border-collapse" style="border: 1px solid var(--border-color);">
                                 <thead class="text-xs uppercase" style="background-color: var(--bg-secondary); color: var(--text-secondary);">
@@ -4864,7 +4892,7 @@
         let tradeHistoryLastHash = null;
         let tradeHistoryRendering = false; // Prevent race conditions
         
-        const renderTradeHistory = async (skipDelay = false) => {
+        const renderTradeHistory = async (skipDelay = false, filters = {}) => {
             try {
                 const tbody = document.getElementById('trade-history-tbody');
                 if (!tbody) return;
@@ -4880,26 +4908,32 @@
                     appState.trades = trades;
                 }
                 
-                // Check if we can use cached HTML
-                const currentHash = performanceCache.getTradesHash(trades);
-                if (tradeHistoryCache && tradeHistoryLastHash === currentHash) {
+                // Apply filters to trades before rendering
+                let filteredTrades = trades;
+                if (Object.keys(filters).length > 0) {
+                    filteredTrades = applyTradeHistoryFilters(trades, filters);
+                }
+                
+                // Check if we can use cached HTML (only if no filters)
+                const currentHash = performanceCache.getTradesHash(filteredTrades);
+                if (tradeHistoryCache && tradeHistoryLastHash === currentHash && Object.keys(filters).length === 0) {
                     tbody.innerHTML = tradeHistoryCache;
                     tradeHistoryRendering = false;
                     return;
                 }
                 
                 // Show loading state for large datasets (skip delay for theme changes)
-                if (trades.length > 1000 && !skipDelay) {
+                if (filteredTrades.length > 1000 && !skipDelay) {
                     tbody.innerHTML = '<tr><td colspan="15" class="text-center py-4">Loading trades...</td></tr>';
                     
                     // Use requestAnimationFrame for smoother rendering
                     requestAnimationFrame(() => {
-                        renderTradeHistoryContent(trades, tbody);
+                        renderTradeHistoryContent(filteredTrades, tbody);
                         tradeHistoryRendering = false;
                     });
                 } else {
                     // Render immediately for theme changes or small datasets
-                    renderTradeHistoryContent(trades, tbody);
+                    renderTradeHistoryContent(filteredTrades, tbody);
                     tradeHistoryRendering = false;
                 }
                 
@@ -4907,6 +4941,38 @@
                 console.error('renderTradeHistory error', e);
                 tradeHistoryRendering = false;
             }
+        };
+        
+        // Filter logic for trade history
+        const applyTradeHistoryFilters = (trades, filters) => {
+            return trades.filter(trade => {
+                // Status filter
+                if (filters.status) {
+                    const isClosed = trade.exit_date && trade.exit_price && (!trade.exit_quantity || trade.exit_quantity >= trade.quantity);
+                    const isPartialExit = trade.exit_date && trade.exit_price && trade.exit_quantity && trade.exit_quantity < trade.quantity;
+                    
+                    let tradeStatus = 'Open';
+                    if (isClosed) tradeStatus = 'Closed';
+                    else if (isPartialExit) tradeStatus = 'Partial Exit';
+                    
+                    if (tradeStatus !== filters.status) return false;
+                }
+                
+                // Date filters
+                if (filters.startDate) {
+                    const entryDate = new Date(trade.entry_date);
+                    const startDate = new Date(filters.startDate);
+                    if (entryDate < startDate) return false;
+                }
+                
+                if (filters.endDate) {
+                    const entryDate = new Date(trade.entry_date);
+                    const endDate = new Date(filters.endDate);
+                    if (entryDate > endDate) return false;
+                }
+                
+                return true;
+            });
         };
         
         const renderTradeHistoryContent = (trades, tbody) => {
@@ -15628,6 +15694,29 @@
         // Export CSV functionality
         document.getElementById('export-csv-btn')?.addEventListener('click', () => {
             exportStatementToCSV();
+        });
+
+        // Trade History Filter Event Listeners
+        document.getElementById('trade-history-apply-filter-btn')?.addEventListener('click', () => {
+            const status = document.getElementById('trade-history-filter-status')?.value || '';
+            const startDate = document.getElementById('trade-history-filter-start-date')?.value || '';
+            const endDate = document.getElementById('trade-history-filter-end-date')?.value || '';
+            
+            const filters = {
+                status: status || null,
+                startDate: startDate || null,
+                endDate: endDate || null
+            };
+            
+            renderTradeHistory(false, filters);
+        });
+
+        document.getElementById('trade-history-reset-filter-btn')?.addEventListener('click', () => {
+            document.getElementById('trade-history-filter-status').value = '';
+            document.getElementById('trade-history-filter-start-date').value = '';
+            document.getElementById('trade-history-filter-end-date').value = '';
+            
+            renderTradeHistory(false, {});
         });
 
         const exportStatementToCSV = () => {
