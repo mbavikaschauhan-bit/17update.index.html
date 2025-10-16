@@ -4071,53 +4071,74 @@
             });
         });
 
+        // Track previous session to detect real login vs token refresh
+        let previousSession = null;
+        let isInitialLoad = true;
+
         // --- AUTHENTICATION & UI VISIBILITY ---
         auth.onAuthStateChanged(async (user) => {
             console.log('Auth state changed:', user ? 'User logged in' : 'User logged out');
+            
             if (user) {
-                appState.user = user;
-                document.getElementById('user-display-name').textContent = user.displayName || 'Guest';
-                console.log('User logged in - showing app container');
+                // Check if this is a real login or just token refresh
+                const isRealLogin = !previousSession || isInitialLoad;
                 
-                // Switch containers immediately for smoother transition
-                authContainer.classList.remove('show');
-                appContainer.classList.add('show');
-                
-                appState.unsubscribeTrades();
-                appState.unsubscribeLedger();
-                appState.unsubscribeProfile();
-                appState.unsubscribeChallenge();
-                appState.unsubscribeChallengeHistory();
+                if (isRealLogin) {
+                    console.log('Real login detected - running full initialization');
+                    
+                    appState.user = user;
+                    document.getElementById('user-display-name').textContent = user.displayName || 'Guest';
+                    console.log('User logged in - showing app container');
+                    
+                    // Switch containers immediately for smoother transition
+                    authContainer.classList.remove('show');
+                    appContainer.classList.add('show');
+                    
+                    appState.unsubscribeTrades();
+                    appState.unsubscribeLedger();
+                    appState.unsubscribeProfile();
+                    appState.unsubscribeChallenge();
+                    appState.unsubscribeChallengeHistory();
 
-                if (appState.clockIntervalId) clearInterval(appState.clockIntervalId);
-                updateLiveClock();
-                appState.clockIntervalId = setInterval(updateLiveClock, 1000);
+                    if (appState.clockIntervalId) clearInterval(appState.clockIntervalId);
+                    updateLiveClock();
+                    appState.clockIntervalId = setInterval(updateLiveClock, 1000);
 
-                setupSupabaseListeners();
+                    setupSupabaseListeners();
+                    
+                    // Get the saved page first
+                    const savedPage = localStorage.getItem('currentPage') || 'dashboard';
+                    
+                    // Set the correct page as active BEFORE loading data to prevent flicker
+                    const pages = document.querySelectorAll('.page');
+                    const navItems = document.querySelectorAll('.nav-item');
+                    
+                    // Set the correct page as active immediately
+                    pages.forEach(p => p.classList.remove('active'));
+                    const targetPage = document.getElementById(savedPage);
+                    if (targetPage) targetPage.classList.add('active');
+                    
+                    // Set the correct nav item as active
+                    navItems.forEach(item => item.classList.remove('active'));
+                    const activeNavItem = document.querySelector(`.nav-item[data-page="${savedPage}"]`);
+                    if (activeNavItem) activeNavItem.classList.add('active');
+                    
+                    // Load all user data including challenges (without rendering all pages)
+                    await loadUserDataOnly();
+                    
+                    // Navigate to the saved page (this will trigger page-specific logic)
+                    navigateTo(savedPage);
+                    applyTheme();
+                } else {
+                    console.log('Token refresh detected - skipping initialization to prevent auto refresh');
+                    // Silent token refresh - no visual changes, no data reloading
+                    // Just update the user reference silently
+                    appState.user = user;
+                }
                 
-                // Get the saved page first
-                const savedPage = localStorage.getItem('currentPage') || 'dashboard';
-                
-                // Set the correct page as active BEFORE loading data to prevent flicker
-                const pages = document.querySelectorAll('.page');
-                const navItems = document.querySelectorAll('.nav-item');
-                
-                // Set the correct page as active immediately
-                pages.forEach(p => p.classList.remove('active'));
-                const targetPage = document.getElementById(savedPage);
-                if (targetPage) targetPage.classList.add('active');
-                
-                // Set the correct nav item as active
-                navItems.forEach(item => item.classList.remove('active'));
-                const activeNavItem = document.querySelector(`.nav-item[data-page="${savedPage}"]`);
-                if (activeNavItem) activeNavItem.classList.add('active');
-                
-                // Load all user data including challenges (without rendering all pages)
-                await loadUserDataOnly();
-                
-                // Navigate to the saved page (this will trigger page-specific logic)
-                navigateTo(savedPage);
-                applyTheme();
+                // Update session tracking
+                previousSession = user;
+                isInitialLoad = false;
             } else {
                 appState.user = null;
                     appContainer.classList.remove('show');
@@ -4125,6 +4146,10 @@
                 console.log('User logged out - showing auth container');
                 if (appState.clockIntervalId) clearInterval(appState.clockIntervalId);
                 appState.clockIntervalId = null;
+                
+                // Reset session tracking
+                previousSession = null;
+                isInitialLoad = true;
             }
         });
 
