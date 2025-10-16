@@ -3463,6 +3463,7 @@
             theme: localStorage.getItem('theme') || 'light',
             calendarDate: new Date(),
             user: null,
+            profileData: null,
             trades: [],
             ledger: [],
             challenge: null,
@@ -4119,7 +4120,9 @@
                     console.log('Real login detected - running full initialization');
                     
                     appState.user = user;
-                    document.getElementById('user-display-name').textContent = user.displayName || 'Guest';
+                    
+                    // Show loading state to prevent jitter - will be updated when profile data loads
+                    document.getElementById('user-display-name').textContent = 'Loading...';
                     console.log('User logged in - showing app container');
                     
                     // Switch containers immediately for smoother transition
@@ -4161,6 +4164,11 @@
                     // Navigate to the saved page (this will trigger page-specific logic)
                     navigateTo(savedPage);
                     applyTheme();
+                    
+                    // Load profile data immediately to update header with actual name
+                    if (appState.user?.id) {
+                        loadProfileData();
+                    }
                 } else {
                     console.log('Token refresh detected - skipping initialization to prevent auto refresh');
                     // Silent token refresh - no visual changes, no data reloading
@@ -8488,7 +8496,26 @@
                 console.log('Profile data loaded:', profileData);
                 
                 if (profileData) {
+                    // Store profile data in appState for global access
+                    appState.profileData = profileData;
+                    
                     renderProfilePage(profileData);
+                    
+                    // Single update pattern - update header display name with profile data (no jitter)
+                    const updateHeaderDisplayName = () => {
+                        // Priority: Profile name > Auth metadata name > Email prefix > Guest
+                        const displayName = profileData.name || 
+                                           appState.user?.user_metadata?.name ||
+                                           appState.user?.email?.split('@')[0] ||
+                                           'Guest';
+                        const headerElement = document.getElementById('user-display-name');
+                        if (headerElement) {
+                            headerElement.textContent = displayName;
+                        }
+                    };
+                    
+                    // Single smooth update - no jitter
+                    updateHeaderDisplayName();
                 } else {
                     console.log('No profile data found for user');
                 }
@@ -18604,5 +18631,4 @@
     <div id="chartjs-custom-tooltip" aria-live="polite" role="tooltip" aria-hidden="true"></div>
 </body>
 </html>
-
 
